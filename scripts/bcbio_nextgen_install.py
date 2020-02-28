@@ -26,6 +26,7 @@ REMOTES = {
     "gitrepo": "https://github.com/bcbio/bcbio-nextgen.git",
     "system_config": "https://raw.github.com/bcbio/bcbio-nextgen/master/config/bcbio_system.yaml",
     "anaconda": "https://repo.continuum.io/miniconda/Miniconda3-latest-%s-x86_64.sh"}
+TARGETPY = "python=3.6"
 
 def main(args, sys_argv):
     check_arguments(args)
@@ -102,9 +103,9 @@ def install_conda_pkgs(anaconda, args):
         subprocess.check_call([anaconda["conda"], "install", "--yes", "nomkl"], env=env)
     channels = _get_conda_channels(anaconda["conda"])
     subprocess.check_call([anaconda["conda"], "install", "--yes"] + channels +
-                          ["--only-deps", "bcbio-nextgen"], env=env)
+                          ["--only-deps", "bcbio-nextgen", TARGETPY], env=env)
     subprocess.check_call([anaconda["conda"], "install", "--yes"] + channels +
-                          ["--file", os.path.basename(REMOTES["requirements"])], env=env)
+                          ["--file", os.path.basename(REMOTES["requirements"]), TARGETPY], env=env)
     return os.path.join(anaconda["dir"], "bin", "bcbio_nextgen.py")
 
 def _guess_distribution():
@@ -224,7 +225,7 @@ def _check_toolplus(x):
     """
     import argparse
     Tool = collections.namedtuple("Tool", ["name", "fname"])
-    std_choices = set(["data", "cadd", "dbnsfp", "ericscript"])
+    std_choices = set(["data", "dbnsfp", "ericscript"])
     if x in std_choices:
         return Tool(x, None)
     elif "=" in x and len(x.split("=")) == 2:
@@ -257,7 +258,7 @@ if __name__ == "__main__":
                         action="append", default=[], type=_check_toolplus)
     parser.add_argument("--datatarget", help="Data to install. Allows customization or install of extra data.",
                         action="append", default=[],
-                        choices=["variation", "rnaseq", "smallrna", "gemini", "cadd", "vep", "dbnsfp",
+                        choices=["variation", "rnaseq", "smallrna", "gemini", "vep", "dbnsfp",
                                  "battenberg", "kraken", "ericscript", "gnomad"])
     parser.add_argument("--genomes", help="Genomes to download",
                         action="append", default=[],

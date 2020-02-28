@@ -4,6 +4,7 @@ https://github.com/ewels/MultiQC
 """
 import collections
 import glob
+import io
 import json
 import mimetypes
 import os
@@ -33,6 +34,7 @@ from bcbio.variation import bedutils
 from bcbio.qc.variant import get_active_vcinfo
 from bcbio.upload import get_all_upload_paths_from_sample
 from bcbio.variation import coverage
+from bcbio.chipseq import atac
 
 def summary(*samples):
     """Summarize all quality metrics together"""
@@ -145,13 +147,13 @@ def _save_uploaded_data_json(samples, data_json_work, out_dir):
     if not upload_path_mapping:
         return data_json_work
 
-    with open(data_json_work) as f:
+    with io.open(data_json_work, encoding="utf-8") as f:
         data = json.load(f, object_pairs_hook=OrderedDict)
     upload_base = samples[0]["upload"]["dir"]
     data = walk_json(data, lambda s: _work_path_to_rel_final_path(s, upload_path_mapping, upload_base))
 
     data_json_final = os.path.join(out_dir, "multiqc_data_final.json")
-    with open(data_json_final, "w") as f:
+    with io.open(data_json_final, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=4)
     return data_json_final
 
@@ -377,6 +379,7 @@ def _create_config_file(out_dir, samples):
         module_order.append("bcftools")
     module_order.extend([
         "salmon",
+        "star",
         "picard",
         "qualimap",
         "snpeff",
@@ -446,6 +449,13 @@ def _add_disambiguate(sample):
             sample["summary"]["metrics"]["Disambiguated ambiguous reads"] = disambigStats[2]
     return sample
 
+def _add_atac(sample):
+    atac_metrics = atac.calculate_encode_complexity_metrics(sample)
+    if not atac_metrics:
+        return sample
+    sample["summary"]["metrics"] = tz.merge(atac_metrics, sample["summary"]["metrics"])
+    return sample
+
 def _fix_duplicated_rate(dt):
     """Get RNA duplicated rate if exists and replace by samtools metric"""
     if "Duplication_Rate_of_Mapped" in dt:
@@ -460,11 +470,12 @@ def _merge_metrics(samples, out_dir):
     sample_metrics = collections.defaultdict(dict)
     for s in samples:
         s = _add_disambiguate(s)
+        s = _add_atac(s)
         m = tz.get_in(['summary', 'metrics'], s)
         if isinstance(m, six.string_types):
             m = json.loads(m)
         if m:
-            for me in m.keys():
+            for me in list(m.keys()):
                 if isinstance(m[me], list) or isinstance(m[me], dict) or isinstance(m[me], tuple):
                     m.pop(me, None)
             sample_metrics[dd.get_sample_name(s)].update(m)

@@ -86,6 +86,32 @@ your local system or cluster configuration (see :ref:`tuning-cores`).
 
 .. _upgrade-install:
 
+On a Virtual Machine
+====================
+If you are looking to quickly try out bcbio-nextgen on your personal
+machine before installing it on your cluster, installing bcbio-nextgen
+on a virtual machine is easy using `Vagrant`_.
+
+macOS
+~~~~~
+- Download and install `VirtualBox`_
+- Download and install `Vagrant for macOS`_
+- Get installer script::
+
+    curl -O https://raw.githubusercontent.com/bcbio/bcbio-nextgen/master/scripts/vm/setup_vm.sh
+
+- Run the installer and follow the instructions::
+
+    sh setup_vm.sh
+
+.. _Vagrant for macOS: https://releases.hashicorp.com/vagrant/2.2.7/vagrant_2.2.7_x86_64.dmg
+.. _VirtualBox: https://download.virtualbox.org/virtualbox/6.1.2/VirtualBox-6.1.2-135662-OSX.dmg
+.. _Vagrant: https://www.vagrantup.com/
+
+Optionally, set the time zone in the VM for easier log viewing, for example::
+
+    sudo timedatectl set-timezone America/New_York
+
 Upgrade
 =======
 
@@ -158,10 +184,6 @@ other analyses. The available targets are:
   collection of genome variants, expanding on ExAC to include whole genome and
   more exome inputs. This is a large 25Gb download, available for human genome
   builds GRCh37, hg19 and hg38.
-- ``cadd`` -- `CADD <http://cadd.gs.washington.edu/home>`_ evaluates the
-  potential impact of variations. It is freely available for non-commercial
-  research, but requires licensing for commercial usage. The download is 30Gb and
-  GEMINI will include CADD annotations if present.
 - ``vep`` -- Data files for the `Variant Effects Predictor (VEP)
   <http://www.ensembl.org/info/docs/tools/vep/index.html>`_. To use VEP as an
   alternative to the default installed snpEff, set ``vep`` in the
@@ -169,13 +191,11 @@ other analyses. The available targets are:
 - ``dbnsfp`` Like CADD, `dbNSFP <https://sites.google.com/site/jpopgen/dbNSFP>`_
   provides integrated and generalized metrics from multiple sources to help with
   prioritizing variations for follow up. The files are large: dbNSFP is 10Gb,
-  expanding to 100Gb during preparation. VEP will use dbNSFP for annotation of
-  VCFs if included.
+  expanding to 100Gb during preparation.
 - ``dbscsnv`` `dbscSNV <https://sites.google.com/site/jpopgen/dbNSFP>`_
   includes all potential human SNVs within splicing consensus regions
   (−3 to +8 at the 5’ splice site and −12 to +2 at the 3’ splice site), i.e. scSNVs,
   related functional annotations and two ensemble prediction scores for predicting their potential of altering splicing.
-  VEP will use dbscSNV for annotation of VCFs if included.
 - ``battenberg`` Data files for `Battenberg
   <https://github.com/cancerit/cgpBattenberg>`_, which detects subclonality and
   copy number changes in whole genome cancer samples.
@@ -193,7 +213,9 @@ that downloads, sorts and merges the VCFs, then copies into your bcbio installat
 
     export COSMIC_USER="your@registered.email.edu"
     export COSMIC_PASS="cosmic_password"
-    bcbio_python prepare_cosmic.py 83 /path/to/bcbio
+    bcbio_python prepare_cosmic.py 89 /path/to/bcbio
+
+``/path/to/bcbio/`` here is the directory one up from the ``genomes`` directory.
 
 .. _toolplus-install:
 
@@ -210,7 +232,7 @@ GATK and MuTect/MuTect2
 bcbio includes an installation of GATK4, which is freely available for all uses.
 This is the default runner for HaplotypeCaller or MuTect2. If you want to use an
 older version of GATK, it requires manual installation. This is freely available
-for academic users, but requires a `license for commerical use
+for academic users, but requires a `license for commercial use
 <https://www.broadinstitute.org/gatk/about/#licensing>`_. It is not freely
 redistributable so requires a manual download from the `GATK download`_ site.
 You also need to include ``tools_off: [gatk4]`` in your configuration for runs:
@@ -234,7 +256,7 @@ the GATK distribution. Then make this jar available to bcbio-nextgen with::
 This will copy the jar and update your bcbio_system.yaml and manifest files to
 reflect the new version.
 
-MuTect also has similar licensing terms and requires a license for commerical
+MuTect also has similar licensing terms and requires a license for commercial
 use. After `downloading the MuTect jar
 <https://www.broadinstitute.org/gatk/download/>`_, make it available to bcbio::
 
@@ -283,7 +305,7 @@ use ``https://`` globally instead of ``git://``::
     $ git config --global url.https://github.com/.insteadOf git://github.com/
 
 GATK or Java Errors
-~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~
 Most software tools used by bcbio require Java 1.8. bcbio distributes an OpenJDK
 Java build and uses it so you don't need to install anything. Older versions of
 GATK (< 3.6) and MuTect require a locally installed Java 1.7. If you

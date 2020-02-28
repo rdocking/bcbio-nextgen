@@ -284,12 +284,12 @@ and template YAML::
       - analysis: variant2
         genome_build: hg38
         algorithm:
-          svcaller: [gatk4-cnv, seq2c]
+          svcaller: [gatk-cnv, seq2c]
           variant_regions: your_regions.bed
 
 After running, collect the panel of normal files from each calling method:
 
-- gatk4-cnv: `work/structural/testsample/bins/background1-pon_build-pon.hdf5`
+- gatk-cnv: `work/structural/testsample/bins/background1-pon_build-pon.hdf5`
 - seq2c: This doesn't have a default panel of normals file format so we create a
   bcbio specific one as a concatenation of the read mapping file
   (`final/date_project/seq2c-read_mapping.txt`) and coverage file
@@ -297,6 +297,9 @@ After running, collect the panel of normal files from each calling method:
   When fed to future bcbio runs, it will correctly extract and re-use this file
   as background.
 - CNVkit: `final/testsample/testsample-cnvkit-background.cnn`
+
+CNVkit and gatk-cnv cannot be run together, because they require different,
+incompatible normalization schemes.
 
 Once you have the panel of normals, use them as background in any tumor only project
 with the same sequencing and capture process in your :ref: `variant-config` configuration::
@@ -490,8 +493,8 @@ inside ``tdrmapper`` or final project folder.
 .. _miRge2: https://github.com/mhalushka/miRge
 .. _isomiRs: https://github.com/lpantano/isomiRs
 
-ChIP-seq
-~~~~~~~~
+ChIP/ATAC-seq
+~~~~~~~~~~~~~
 The bcbio-nextgen implementation of ChIP-seq aligns, removes multimapping reads,
 calls peaks with a paired input file using MACS2 and outputs a set of greylist
 regions for filtering possible false peaks in regions of high depth in the input
@@ -514,6 +517,17 @@ file.
 
 .. _macs2: https://github.com/taoliu/MACS
 .. _chipseq-greylist: https://github.com/roryk/chipseq-greylist
+
+Methylation
+~~~~~~~~~~~
+Whole genome bisulfite sequencing is supported using the `bismark2`_ pipeline.
+It can be turned on by setting `analysis` to `wgbs-seq`. Right now we only
+support the TruSeq Methyl Capture EPIC kit-- if you want to run a different
+setup, please let us know via an `issue`_ and we can add support for it.
+Consider this a beta feature.
+
+.. _issue: https://github.com/bcbio/bcbio-nextgen/issues
+.. _bismark2: https://www.bioinformatics.babraham.ac.uk/projects/bismark/
 
 Standard
 ~~~~~~~~

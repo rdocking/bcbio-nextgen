@@ -318,8 +318,8 @@ def run_rnaseq(bam_file, data, out_dir):
     """
     Run qualimap for a rnaseq bam file and parse results
     """
-    strandedness = {"firststrand": "strand-specific-reverse",
-                    "secondstrand": "strand-specific-forward",
+    strandedness = {"firststrand": "strand-specific-forward",
+                    "secondstrand": "strand-specific-reverse",
                     "unstranded": "non-strand-specific"}
 
     # Qualimap results should be saved to a directory named after sample.
@@ -331,6 +331,16 @@ def run_rnaseq(bam_file, data, out_dir):
     config = data["config"]
     gtf_file = dd.get_gtf_file(data)
     library = strandedness[dd.get_strandedness(data)]
+
+    # don't run qualimap on the full bam by default
+    if "qualimap_full" in tz.get_in(("config", "algorithm", "tools_on"), data, []):
+        logger.info(f"Full qualimap analysis for {bam_file} may be slow.")
+        ds_bam = bam_file
+    else:
+        logger.info(f"Downsampling {bam_file} for Qualimap run.")
+        ds_bam = bam.downsample(bam_file, data, 1e7, work_dir=out_dir)
+        bam_file = ds_bam if ds_bam else bam_file
+
     if not utils.file_exists(results_file):
         with file_transaction(data, results_dir) as tx_results_dir:
             utils.safe_makedir(tx_results_dir)
@@ -366,6 +376,9 @@ def _rnaseq_qualimap_cmd(data, bam_file, out_dir, gtf_file=None, library="non-st
     export = "%s%s" % (utils.java_freetype_fix(), utils.local_path_export())
     export = "%s%s export JAVA_OPTS='-Xms32m -Xmx%s -Djava.io.tmpdir=%s' && " % (
         utils.java_freetype_fix(), utils.local_path_export(), max_mem, out_dir)
+    if library != "non-strand-specific":
+        logger.info("Qualimap can get the orientation wrong for stranded reads, so we run it in unstranded mode. This gives comparable results to unstranded for RNA-seq data (see https://groups.google.com/forum/#!topic/qualimap/ZGo-k8LGmHQ) for a further explanation.")
+        library = "non-strand-specific"
     paired = " --paired" if bam.is_paired(bam_file) else ""
     cmd = ("unset DISPLAY && {export} {qualimap} rnaseq -outdir {out_dir} "
            "-a proportional -bam {bam_file} -p {library}{paired} "

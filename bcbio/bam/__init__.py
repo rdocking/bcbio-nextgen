@@ -403,11 +403,11 @@ def merge(bamfiles, out_bam, config):
     return out_bam
 
 
-def sort(in_bam, config, order="coordinate", out_dir=None):
+def sort(in_bam, config, order="coordinate", out_dir=None, force=False):
     """Sort a BAM file, skipping if already present.
     """
     assert is_bam(in_bam), "%s in not a BAM file" % in_bam
-    if bam_already_sorted(in_bam, config, order):
+    if not force and bam_already_sorted(in_bam, config, order):
         return in_bam
 
     sort_stem = _get_sort_stem(in_bam, order, out_dir)
@@ -514,7 +514,7 @@ def estimate_max_mapq(in_bam, nreads=1e6):
     """Guess maximum MAPQ in a BAM file of reads with alignments
     """
     with pysam.Samfile(in_bam, "rb") as work_bam:
-        reads = tz.take(nreads, work_bam)
+        reads = tz.take(int(nreads), work_bam)
         return max([x.mapq for x in reads if not x.is_unmapped])
 
 def convert_cufflinks_mapq(in_bam, out_bam=None):
@@ -561,3 +561,42 @@ def convert_invalid_mapq(in_bam, out_bam=None):
                     read.mapq = VALIDMAPQ
                 out_bam_fh.write(read)
     return out_bam
+
+def remove_duplicates(in_bam, data):
+    """
+    remove duplicates from a duplicate marked BAM file
+    """
+    base, ext = os.path.splitext(in_bam)
+    out_bam = base + "-noduplicates" + ext
+    if utils.file_exists(out_bam):
+        return out_bam
+    num_cores = dd.get_num_cores(data)
+    sambamba = config_utils.get_program("sambamba", data)
+    with file_transaction(out_bam) as tx_out_bam:
+        cmd = (f'{sambamba} view -h --nthreads {num_cores} -f bam -F "not duplicate" '
+               f'{in_bam} > {tx_out_bam}')
+        message = f"Removing duplicates from {in_bam}, saving as {out_bam}."
+        do.run(cmd, message)
+    index(out_bam, dd.get_config(data))
+    return out_bam
+
+def count_alignments(in_bam, data, filter=None):
+    """
+    count alignments in a BAM file passing a given filter. valid filter
+    strings are available in the sambamba documentation:
+
+    https://github.com/biod/sambamba/wiki/%5Bsambamba-view%5D-Filter-expression-syntax
+    """
+    sambamba = config_utils.get_program("sambamba", dd.get_config(data))
+    num_cores = dd.get_num_cores(data)
+    if not filter:
+        filter_string = ""
+        message = f"Counting alignments in {in_bam}."
+    else:
+        filter_string = "--filter {filter}"
+        message = f"Counting alignments in {in_bam} matching {filter}."
+    cmd = f"{sambamba} view -c --nthreads {num_cores} -f bam {filter_string} {in_bam}"
+    logger.info(message)
+    result = subprocess.run(cmd, shell=True, stdout=subprocess.PIPE,
+                            stderr=subprocess.PIPE)
+    return int(result.stdout.decode().strip())

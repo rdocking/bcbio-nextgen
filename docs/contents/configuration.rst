@@ -558,6 +558,7 @@ Alignment postprocessing
 
 Coverage information
 ====================
+
 - ``coverage_interval`` Regions covered by sequencing. bcbio calculates this
   automatically from alignment coverage information, so you only need to
   specify it in the input configuration if you have specific needs or bcbio
@@ -641,9 +642,9 @@ the naming schemes described in the
       help with slow runtimes in these regions, and also on for whole genome
       structural variant calling to avoid false positives from high depth
       repeats.
-    - ``altcontigs`` Skip calling entirely in alternative and unplaced contigs. This
-      limits analysis to standard chromosomes -- chr1-22,X,Y,MT for human -- to
-      avoid slowdowns on the additional contigs.
+    - ``altcontigs`` Skip calling in unplaced contigs (Un), limit analysis to standard chromosomes -- 
+      chr1-22,X,Y,MT for human -- to avoid slowdowns on the additional contigs. By default bcbio calls variants in 
+      unplaced but not in alternative contigs (alleles). Alt contig calling is currently not supported.
 .. _variant-config:
 
 Variant calling
@@ -737,9 +738,16 @@ Somatic variant calling
 =======================
 
 - ``min_allele_fraction`` Minimum allele fraction to detect variants in
-  heterogeneous tumor samples, set as the float or integer percentage to
+  heterogeneous tumor samples, set as the float or integer **percentage** to
   resolve (i.e. 10 = alleles in 10% of the sample). Defaults to 10. Specify this
-  in the tumor sample of a tumor/normal pair.
+  in the tumor sample of a tumor/normal pair. It is percentage, not ratio,
+  it is divided /100.0 when calling vardict!
+
+- ``use_lowfreq_filter: false``. When set, forces vardict to report variants
+  with low allelec frequency, useful to call variants in panels with high coverage
+  (>1000x). The default (option is not set to false in the config) is to use
+  low frequency filter, i.e. variants could be underreported (variant VAF is above
+  min_allele_fraction but rejected by the filter).
 
 .. _config-variant-annotation:
 
@@ -748,8 +756,7 @@ Variant annotation
 
 - ``effects`` Method used to calculate expected variant effects; defaults to
   `snpEff`_. `Ensembl variant effect predictor (VEP)`_ is also available
-  with support for `dbNSFP`_  and `dbscSNV`_ annotation, when downloaded using
-  :ref:`datatarget-install`. [snpeff, vep, false]
+  when downloaded using :ref:`datatarget-install`. [snpeff, vep, false]
 - ``effects_transcripts`` Define the transcripts to use for effect prediction
   annotation. Options ``all``: Standard Ensembl transcript list (the default);
   ``canonical``: Report single canonical transcripts (``-canon`` in snpEff,
@@ -780,6 +787,8 @@ Structural variant calling
 
 - ``svcaller`` -- List of structural variant callers to use. [lumpy, manta,
   cnvkit, gatk-cnv, seq2c, purecn, titancna, delly, battenberg]. LUMPY and Manta require paired end reads.
+  cnvkit and gatk-cnv should not be used on the same sample due to
+  incompatible normalization approaches, please pick one or the other for CNV calling.
 - ``svprioritize`` --  Produce a tab separated summary file of structural
   variants in regions of interest. This complements the full VCF files of
   structural variant calls to highlight changes in known genes. See the `paper
@@ -815,6 +824,9 @@ Structural variant calling
   supports human genome builds GRCh37 and hg19. ``ericscript`` supports human
   genome builds GRCh37, hg19 and hg38 after installing the associated fusion
   databases (:ref:`datatarget-install`).
+- ``known_fusions`` A TAB-delimited file of the format ``gene1<tab>gene2``, where ``gene1`` and
+  ``gene2`` are identifiers of genes specified under ``gene_name`` in the attributes part of the
+  GTF file.
 
 HLA typing
 ==========
@@ -932,6 +944,18 @@ To convert duplex barcodes present on the ends of read 1 and read 2::
 
    bcbio_fastq_umi_prep.py autopair -c <cores_to_use> --tag1 5 --tag2 5 <list> <of> <fastq> <files>
 
+If you want to prepare your FASTQ files for use with the ``umi_type: fastq_name`` option and they
+don't follow the two barcode schemes listed you can pre-transform the FASTQ files yourself by
+putting ``:UMI_yourumisequence`` in the read name. Here is an example::
+
+  @A00574:89:HCLMTDRXX:1:2101:1425:1016:UMI_CGAACGTGTACACG 2:N:0:CTGAAGCT+GGCTCTGA
+  GTGATATAATTTATTTTCTTAAAATAGCCATGCTGGCTGGAGCCACAGCAGTTTACTCCCAGTTCATTACTCAGCTAACAGACGAAAACCAGT
+  +
+  FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF:FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+
+For more complex UMI schemes please open up an issue and we can help you write a transformation to
+prepare your files. We use https://github.com/vals/umis to do these more complex transformations.
+
 Configuration options for UMIs:
 
 - ``umi_type`` The UMI/cellular barcode scheme used for your data. For single
@@ -939,6 +963,11 @@ Configuration options for UMIs:
   For variant analysis with UMI based consensus calling, supports either
   ``fastq_name`` with UMIs in read names or the path to a fastq file with
   UMIs for each aligned read.
+
+- ``correct_umis: [path/to/whitelist_umi.txt]``. For a restricted set of UMIs specify a
+  text file (one UMI per line). UMIs will be corrected with
+  http://fulcrumgenomics.github.io/fgbio/tools/latest/CorrectUmis.html
+
 
 You can adjust the `fgbio default options
 <https://github.com/bcbio/bcbio-nextgen/blob/8a76c9e546cb79621707082fd763bd643e0e9652/bcbio/ngsalign/postalign.py#L208>`_
@@ -949,6 +978,7 @@ avoid losing reads but you can set to larger values for high depth panels::
      resources:
        fgbio:
          options: [--min-reads, 2]
+
 
 RNA sequencing
 ==============
@@ -965,6 +995,9 @@ RNA sequencing
   [oncofuse, pizzly].
 -  ``variantcaller`` Variant calling algorithm to call variants on RNA-seq data. Supports [gatk-haplotype] or [vardict].
 - ``spikein_fasta`` A FASTA file of spike in sequences to quantitate.
+- ``quantify_genome_alignments`` If set to True, run Salmon quantification using the genome
+  alignments from STAR, when available. If STAR alignments are not available, use Salmon's
+  SA mode with decoys.
 - ``bcbiornaseq`` A dictionary of key-value pairs to be passed as options to bcbioRNAseq. Currently supports `organism` as a key and takes the latin name of the genome used (`mus musculus`, `homo sapiens`, etc) and `interesting_groups` which will be used to color quality control plots.::
 
     bcbiornaseq:
@@ -1001,7 +1034,10 @@ Single-cell RNA sequencing
 - ``sample_barcodes`` A text file with one barcode per line of expected sample
   barcodes. If the file contains sample name for each barcode, this will be used to
   create a ``tagcounts.mtx.metadata`` that match each cell with the sample name
-  associated with the barcode. This is an example of the file::
+  associated with the barcode. The actual barcodes may be reverse complements of the
+  sequences provided with the samples. It worth to check before running bcbio.
+  For inDrops procol samples barcodes are in the fastq file for read3.
+  This is an example of the ``sample_barcodes`` file::
 
     AATTCCGG,sample1
     CCTTGGAA,sample2
@@ -1023,13 +1059,16 @@ smallRNA sequencing
 - ``spikein_fasta`` A FASTA file of spike in sequences to quantitate.
 - ``umi_type: 'qiagen_smallRNA_umi'`` Support of Qiagen UMI small RNAseq protocol.
 
-ChIP sequencing
+ChIP/ATAC sequencing
 ===============
 
 - ``peakcaller`` bcbio only accepts ``[macs2]``
-- ``aligner`` Currently ``bowtie2`` is the only one tested
+- ``aligner`` Currently ``bowtie2`` is the only one tested. ``bwa`` is also available.
 - The ``phenotype`` and ``batch`` tags need to be set under ``metadata`` in the config YAML file. The ``phenotype`` tag will specify the chip (``phenotype: chip``) and input samples (``phenotype: input``). The ``batch`` tag will specify the input-chip pairs of samples for example, ``batch: pair1``. Same input can be used for different chip samples giving a list of distinct values: ``batch: [sample1, sample2]``.
-- ``chip_method``: currently supporting standard CHIP-seq (TF or broad regions using `chip`) or ATAC-seq (`atac`). Paramters will change depending on the option to get the best possible results. Only macs2 supported for now.
+- ``chip_method``: currently supporting standard CHIP-seq (TF or broad regions using `chip`) or ATAC-seq (`atac`). Parameters will change depending on the option to get the best possible results. Only macs2 supported for now.
+- ``antibody``: automatically sets peakcalling options tailored for the specific anitbody. Supports `h3f3a`, `h3k27me3`, `h3k36me3`, `h3k4me1`, `h3k79me2`, `h3k9me3`, `h3k9me1`, `h3k9me2`, `h4k20me1`, `h2afz`, `h3ac`, `h3k27ac`, `h3k4me2`, `h3k4me3`, `h3k9ac`, `h3k9me3`.
+- ``keep_duplicates``: do not remove duplicates before peak calling. Defaults to `False`.
+- ``keep_multimapped``: do not remove multimappers before peak calling. Defaults to `False`.
 
 You can pass different parameters for ``macs2`` adding to :ref:`config-resources`::
 
@@ -1039,6 +1078,11 @@ You can pass different parameters for ``macs2`` adding to :ref:`config-resources
             options: ["--broad"]
 
 .. _docs-config-qc:
+
+Methylation
+===========
+- ``aligner`` supports ``bismark``
+
 
 Quality control
 ===============
@@ -1105,7 +1149,10 @@ Post-processing
 - ``archive`` Specify targets for long term archival. ``cram`` removes fastq
   names and does 8-bin compression of BAM files into `CRAM format`_.
   ``cram-lossless`` generates CRAM files without changes to quality scores or
-  fastq name. Default: [] -- no archiving.
+  fastq name. Default: [] -- no archiving. Lossy cram has some issues,
+  lossless cram provides pretty good compression relative to BAM, and many
+  machines output binned values now, so ``cram-lossless`` is what we
+  recommend you use.
 
 .. _CRAM format: http://www.ebi.ac.uk/ena/about/cram_toolkit
 
@@ -1147,43 +1194,45 @@ lists with multiple options:
 
 - ``tools_on`` Specify functionality to enable that is off by default:
 
+  - ``bcbiornaseq`` loads a bcbioRNASeq object for use with `bcbioRNASeq <https://github.com/hbc/bcbioRNASeq>`_.
+  - ``bnd-genotype`` enables genotyping of breakends in Lumpy calls, which
+    improves accuracy but can be slow.
+  - ``bwa-mem`` forces use of bwa mem even for samples with less than 70bp
+  reads.
+  - ``coverage_perbase`` calculates per-base coverage depth for analyzed variant
+    regions.
+  - ``damage_filter`` annotates low frequency somatic calls in INFO/DKFZBias for
+  DNA damage artifacts using `DKFZBiasFilter <https://github.com/eilslabs/DKFZBiasFilter>`_.
+  - ``gemini`` Create a `GEMINI database <https://github.com/arq5x/gemini>`_ of variants for
+    downstream query using the new vcfanno and vcf2db approach.
+  - ``gemini_allvariants`` enables all variants to go into GEMINI, not only
+    those that pass filters.
+  - ``gemini_orig`` Create a `GEMINI database <https://github.com/arq5x/gemini>`_
+    of variants using the older GEMINI loader. Only works for GRCh37 and hg19.
+  - ``gvcf`` forces gVCF output for callers that support it (GATK
+    HaplotypeCaller, FreeBayes, Platypus). For joint calling using a population of samples,
+    please use `jointcaller` (:ref:`population-calling`).
+  - ``lumpy_usecnv`` uses input calls from CNVkit as prior evidence to Lumpy
+    calling.
+  - ``noalt_calling`` call variants only for chr1,,22,X,Y,MT.
   - ``qualimap`` runs `Qualimap <http://qualimap.bioinfo.cipf.es/>`_ (qualimap
     uses downsampled files and numbers here are an estimation of 1e7 reads.).
   - ``qualimap_full`` runs Qualimap with full bam files but it may be slow.
-  - ``damage_filter`` annotates low frequency somatic calls in INFO/DKFZBias for
-    DNA damage artifacts using `DKFZBiasFilter <https://github.com/eilslabs/DKFZBiasFilter>`_.
-  - ``tumoronly_germline_filter`` applies a ``LowPriority`` filter to tumor-only calls
-    that match population germline databases. The default is to just apply a tag
-    ``EPR`` (external prioritization) that flags variants present in external
-    databases. Anything missing a ``pass`` here is a likely germline.
-  - ``vqsr`` makes GATK try quality score recalibration for variant filtration,
-    even for smaller sample sizes.
   - ``svplots`` adds additional coverage and summary plots for CNVkit and detected
     ensemble variants.
-  - ``bwa-mem`` forces use of bwa mem even for samples with less than 70bp
-    reads.
-  - ``gvcf`` forces gVCF output for callers that support it (GATK
-    HaplotypeCaller, FreeBayes, Platypus).
-  - ``vep_splicesite_annotations`` enables the use of the MaxEntScan and
-    SpliceRegion plugin for VEP. Both optional plugins add extra splice site
-    annotations.
-  - ``gemini`` Create a `GEMINI database <https://github.com/arq5x/gemini>`_ of variants for
-    downstream query using the new vcfanno and
-    vcf2db approach.
-  - ``gemini_orig`` Create a `GEMINI database <https://github.com/arq5x/gemini>`_
-    of variants using the older GEMINI loader. Only works for GRCh37 and hg19.
-  - ``gemini_allvariants`` enables all variants to go into GEMINI, not only
-    those that pass filters.
+  - ``tumoronly_germline_filter`` applies a ``LowPriority`` filter to tumor-only calls
+    that match population germline databases. The default is to just apply a tag ``EPR``
+    (external prioritization) that flags variants present in external databases.
+    Anything missing a ``pass`` here is a likely germline.
   - ``vcf2db_expand`` decompresses and expands the genotype columns in the
     vcfanno prepared GEMINI databases, enabling standard SQL queries on
     genotypes and depths.
-  - ``bnd-genotype`` enables genotyping of breakends in Lumpy calls, which
-    improves accuracy but can be slow.
-  - ``lumpy_usecnv`` uses input calls from CNVkit as prior evidence to Lumpy
-    calling.
-  - ``coverage_perbase`` calculates per-base coverage depth for analyzed variant
-    regions.
-  - ``bcbiornaseq`` loads a bcbioRNASeq object for use with `bcbioRNASeq <https://github.com/hbc/bcbioRNASeq>`_.
+  - ``vqsr`` makes GATK try quality score recalibration for variant filtration,
+    even for smaller sample sizes.
+  - ``vep_splicesite_annotations`` enables the use of the MaxEntScan and
+    SpliceRegion plugin for VEP. Both optional plugins add extra splice site
+    annotations.
+
 
 
 parallelization
@@ -1275,6 +1324,8 @@ and memory and compute resources to devote to them::
         memory: 2G
       gatk:
         jvm_opts: ["-Xms2g", "-Xmx4g"]
+      mutect2_filter:
+        options: ["--max-events-in-region", "2"]
 
 - ``cmd`` Location of an executable. By default, we assume executables
   are on the path.
@@ -1308,6 +1359,10 @@ and memory and compute resources to devote to them::
             SENTIEON_LICENSE_SERVER: 100.100.100.100:8888
             SENTIEON_AUTH_MECH: XXX
             SENTIEON_AUTH_DATA: signature
+- ``options`` Adjust specific command line options for a program. This can be hard
+  to support for many tools due to conflicts with other existing options but is
+  available for some tools:
+    - ``mutect2``, ``mutect2_filter``: Adjust for Mutect2 calls and filtering.
 
 Temporary directory
 ===================
@@ -1495,6 +1550,10 @@ indexes corresponding to aligners you'd like to use (for example:
 key names used (like ``GRCh37`` and ``mm10``) should match those used in the
 ``genome_build`` of your sample input configuration file.
 
+To remove a reference genome, delete its directory ``bcbio/genomes/species/reference``
+and remove all the records corresponding to that genome from ``bcbio/galaxy/tool-data/*.loc``
+files.
+
 .. _Galaxy .loc files: http://wiki.galaxyproject.org/Admin/NGS%20Local%20Setup
 
 .. _config-custom:
@@ -1504,11 +1563,13 @@ Adding custom genomes
 ``bcbio_setup_genome.py`` will help you to install a custom genome and apply all changes needed
 to the configuration files. It needs the genome in FASTA format, and the annotation file
 in GTF or GFF3 format. It can create index for all aligners used by bcbio. Moreover, it will create
-the folder `rnaseq` to allow you run the RNAseq pipeline without further configuration.
+the folder `rnaseq` to allow you run the RNAseq pipeline without further configuration. The ``--buildversion``
+option will write that string to the ``version.txt`` file, to track from where and which version of
+a gene build was used.
 
 ::
 
-    bcbio_setup_genome.py -f genome.fa -g annotation.gtf -i bowtie2 star seq -n Celegans -b WBcel135
+    bcbio_setup_genome.py -f genome.fa -g annotation.gtf -i bowtie2 star seq -n Celegans -b WBcel135 --buildversion WormBase_34
 
 If you want to add smallRNA-seq data files, you will need to add the 3 letters code of mirbase
 for your genome (i.e hsa for human) and the GTF file for the annotation of smallRNA data.
@@ -1516,7 +1577,7 @@ Here you can use the same file than the transcriptome if no other available.
 
 ::
 
-    bcbio_setup_genome.py -f genome.fa -g annotation.gtf -i bowtie2 star seq -n Celegans -b WBcel135 --species cel --srna_gtf another_annotation.gtf
+    bcbio_setup_genome.py -f genome.fa -g annotation.gtf -i bowtie2 star seq -n Celegans -b WBcel135 --species cel --srna_gtf another_annotation.gtf --buildversion WormBase_34
 
 To use that genome just need to configure your YAML files as::
 

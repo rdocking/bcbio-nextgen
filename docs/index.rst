@@ -3,7 +3,7 @@
    You can adapt this file completely to your liking, but it should at least
    contain the root `toctree` directive.
 
-.. image:: contents/images/github.png
+.. image:: contents/images/banner.png
    :alt: bcbio banner
    :align: center
 
@@ -21,16 +21,16 @@ Contents:
 .. toctree::
    :maxdepth: 2
 
-   contents/introduction
+   contents/about
    contents/installation
    contents/pipelines
-   contents/testing
+   contents/intro
    contents/configuration
    contents/parallel
    contents/cwl
    contents/cloud
    contents/outputs
-   contents/code
+   contents/development
    contents/internals
    contents/presentations
    contents/teaching

@@ -72,7 +72,7 @@ def _clean_java_out(version_str):
     Java will report information like _JAVA_OPTIONS environmental variables in the output.
     """
     out = []
-    for line in version_str.decode().split("\n"):
+    for line in version_str.split("\n"):
         if line.startswith("Picked up"):
             pass
         if line.find("setlocale") > 0:
@@ -94,7 +94,8 @@ def get_gatk_version(gatk_jar=None, config=None):
         cl = gatk_cmd("gatk", ["-Xms128m", "-Xmx256m"] + get_default_jvm_opts(), ["-version"], config=config)
     with closing(subprocess.Popen(cl, stdout=subprocess.PIPE,
                                   stderr=subprocess.STDOUT, shell=True).stdout) as stdout:
-        out = _clean_java_out(stdout.read().strip())
+        stdout = stdout.read().decode().strip()
+        out = _clean_java_out(stdout)
         # Historical GATK version (2.4) and newer versions (4.1.0.0)
         # have a flag in front of output version
         version = out
@@ -113,7 +114,8 @@ def get_mutect_version(mutect_jar):
     """
     cl = ["java", "-Xms128m", "-Xmx256m"] + get_default_jvm_opts() + ["-jar", mutect_jar, "-h"]
     with closing(subprocess.Popen(cl, stdout=subprocess.PIPE, stderr=subprocess.STDOUT).stdout) as stdout:
-        if "SomaticIndelDetector" in stdout.read().strip():
+        stdout = stdout.read().decode().strip()
+        if "SomaticIndelDetector" in stdout:
             mutect_type = "-appistry"
         else:
             mutect_type = ""
@@ -243,7 +245,7 @@ class BroadRunner:
         cl += ["--version"]
         p = subprocess.Popen(cl, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
         # fix for issue #494
-        pat = re.compile('([\d|\.]*)(\(\d*\)$)')  # matches '1.96(1510)'
+        pat = re.compile(r'([\d|\.]*)(\(\d*\)$)')  # matches '1.96(1510)'
         m = pat.search(p.stdout.read())
         version = m.group(1)
         self._picard_version = version
@@ -258,7 +260,7 @@ class BroadRunner:
                 return True
             else:
                 try:
-                    stdout = subprocess.check_output(cmd, stderr=subprocess.STDOUT, shell=True)
+                    stdout = subprocess.check_output(cmd, stderr=subprocess.STDOUT, shell=True, encoding="UTF-8")
                     return stdout.find("GATK jar file not found") == -1
                 except subprocess.CalledProcessError:
                     return False
@@ -382,7 +384,7 @@ class BroadRunner:
             self._set_default_versions(self._config)
 
         if "gatk4" not in dd.get_tools_off({"config": self._config}):
-            # In cases whwere we don't have manifest versions. Not possible to get
+            # In cases where we don't have manifest versions. Not possible to get
             # version from commandline with GATK4 alpha version
             if self._gatk4_version is None:
                 self._gatk4_version = "4.0"

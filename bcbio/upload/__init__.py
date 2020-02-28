@@ -90,6 +90,8 @@ def _get_files_rnaseq(sample):
     out = _maybe_add_salmon_files(algorithm, sample, out)
     out = _maybe_add_kallisto_files(algorithm, sample, out)
     out = _maybe_add_ericscript_files(algorithm, sample, out)
+    out = _maybe_add_arriba_files(algorithm, sample, out)
+    out = _maybe_add_junction_files(algorithm, sample, out)
     return _add_meta(out, sample)
 
 def _get_files_srnaseq(sample):
@@ -116,6 +118,7 @@ def _get_files_chipseq(sample):
     algorithm = sample["config"]["algorithm"]
     out = _maybe_add_summary(algorithm, sample, out)
     out = _maybe_add_alignment(algorithm, sample, out)
+    out = _maybe_add_nucleosome_alignments(algorithm, sample, out)
     out = _maybe_add_peaks(algorithm, sample, out)
     out = _maybe_add_greylist(algorithm, sample, out)
     return _add_meta(out, sample)
@@ -249,6 +252,7 @@ def _maybe_add_sv(algorithm, sample, out):
         for svcall in sample["sv"]:
             if svcall.get("variantcaller") == "seq2c":
                 out.extend(_get_variant_file(svcall, ("calls",), sample=batch))
+                out.extend(_get_variant_file(svcall, ("gender_predicted",), sample=batch))
             for key in ["vrn_file", "cnr", "cns", "seg", "gainloss",
                         "segmetrics", "vrn_bed", "vrn_bedpe"]:
                 out.extend(_get_variant_file(svcall, (key,), sample=batch))
@@ -379,7 +383,7 @@ def _maybe_add_sailfish_files(algorithm, sample, out):
 
 def _maybe_add_salmon_files(algorithm, sample, out):
     salmon_dir = os.path.join(dd.get_work_dir(sample), "salmon",
-                              dd.get_sample_name(sample), "quant")
+                              dd.get_sample_name(sample))
     if os.path.exists(salmon_dir):
         out.append({"path": salmon_dir,
                     "type": "directory",
@@ -490,6 +494,17 @@ def _maybe_add_transcriptome_alignment(sample, out):
                     "ext": "transcriptome"})
     return out
 
+def _maybe_add_nucleosome_alignments(algorithm, sample, out):
+    """
+    for ATAC-seq, also upload NF, MN, DN and TN bam files
+    """
+    atac_align = tz.get_in(("atac", "align"), sample, {})
+    for alignment in atac_align.keys():
+        out.append({"path": atac_align[alignment],
+                    "type": "bam",
+                    "ext": alignment})
+    return out
+
 def _maybe_add_counts(algorithm, sample, out):
     if not dd.get_count_file(sample):
         return out
@@ -541,7 +556,8 @@ def _maybe_add_barcode_histogram(algorithm, sample, out):
 def _maybe_add_oncofuse(algorithm, sample, out):
     if sample.get("oncofuse_file", None) is not None:
         out.append({"path": sample["oncofuse_file"],
-                    "type": "oncofuse_outfile",
+                    "type": "tsv",
+                    "dir": "oncofuse",
                     "ext": "ready"})
     return out
 
@@ -551,6 +567,51 @@ def _maybe_add_pizzly(algorithm, sample, out):
         out.append({"path": pizzly_dir,
                     "type": "directory",
                     "ext": "pizzly"})
+    return out
+
+def _maybe_add_arriba_files(algorithm, sample, out):
+    pizzly_dir = dd.get_pizzly_dir(sample)
+    arriba = dd.get_arriba(sample)
+    if arriba:
+        out.append({"path": arriba["fusions"],
+                    "type": "tsv",
+                    "ext": "arriba-fusions",
+                    "dir": "arriba"})
+        out.append({"path": arriba["discarded"],
+                    "type": "tsv",
+                    "ext": "arriba-discarded-fusions",
+                    "dir": "arriba"})
+    return out
+
+def _maybe_add_junction_files(algorithm, sample, out):
+    """
+    add splice junction files from STAR, if available
+    """
+    junction_bed = dd.get_junction_bed(sample)
+    if junction_bed:
+        out.append({"path": junction_bed,
+                    "type": "bed",
+                    "ext": "SJ",
+                    "dir": "STAR"})
+    chimeric_file = dd.get_chimericjunction(sample)
+    if chimeric_file:
+        out.append({"path": chimeric_file,
+                    "type": "tsv",
+                    "ext": "chimericSJ",
+                    "dir": "STAR"})
+    sj_file = dd.get_starjunction(sample)
+    if sj_file:
+        out.append({"path": sj_file,
+                    "type": "tab",
+                    "ext": "SJ",
+                    "dir": "STAR"})
+    star_summary = dd.get_summary_qc(sample).get("star", None)
+    if star_summary:
+        star_log = star_summary["base"]
+        if star_log:
+            out.append({"path": star_log,
+                        "type": "log",
+                        "dir": "STAR"})
     return out
 
 def _maybe_add_cufflinks(algorithm, sample, out):
@@ -608,14 +669,25 @@ def _maybe_add_trna(algorithm, sample, out):
 
 def _maybe_add_peaks(algorithm, sample, out):
     out_dir = sample.get("peaks_files", {})
-    for caller in out_dir:
-        if caller == "main":
-            continue
-        for fn in out_dir[caller]:
-            if os.path.exists(fn):
-                out.append({"path": fn,
-                             "dir": caller,
-                             "ext": utils.splitext_plus(fn)[1]})
+    if "NF" in out_dir.keys():
+        for files in out_dir.values():
+            for caller in files:
+                if caller == "main":
+                    continue
+                for fn in files[caller]:
+                    if os.path.exists(fn):
+                        out.append({"path": fn,
+                                    "dir": caller,
+                                    "ext": utils.splitext_plus(fn)[1]})
+    else:
+        for caller in out_dir:
+            if caller == "main":
+                continue
+            for fn in out_dir[caller]:
+                if os.path.exists(fn):
+                    out.append({"path": fn,
+                                "dir": caller,
+                                "ext": utils.splitext_plus(fn)[1]})
     return out
 
 def _maybe_add_greylist(algorithm, sample, out):
@@ -772,6 +844,9 @@ def _get_files_project(sample, upload_config):
                             "type": "rda"})
         else:
             out.append({"path": dd.get_combined_counts(sample)})
+    if dd.get_tximport(sample):
+        out.append({"path": dd.get_tximport(sample)["gene_tpm"], "dir": "tpm"})
+        out.append({"path": dd.get_tximport(sample)["gene_counts"], "dir": "counts"})
     if dd.get_annotated_combined_counts(sample):
         out.append({"path": dd.get_annotated_combined_counts(sample)})
     if dd.get_combined_fpkm(sample):
